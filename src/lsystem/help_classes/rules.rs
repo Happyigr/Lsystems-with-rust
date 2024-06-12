@@ -1,7 +1,10 @@
 use std::{collections::HashMap, fmt::Display};
 
+use serde::{Deserialize, Serialize};
+
 use super::{rule::Rule, Behaviour};
 
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Rules(HashMap<char, (String, Behaviour)>);
 
 impl Rules {
