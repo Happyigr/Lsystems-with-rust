@@ -4,6 +4,7 @@ use crate::lsystem::{Behaviour, LsystemConfig, Rule};
 
 const DEGREES_IN_RAD: f32 = 0.01745329;
 
+#[derive(Clone)]
 pub struct AppConfig {
     pub bg_color: String,
 

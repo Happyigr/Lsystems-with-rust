@@ -1,5 +1,5 @@
 use nannou::{
-    color::{rgb, Rgb},
+    color::{rgb, Rgb, BLACK},
     geom::Rect,
     Draw,
 };
@@ -29,5 +29,6 @@ pub fn debug_info(draw: &Draw, win: Rect, lsystem: &LsystemConfig) {
         .line_spacing(pad)
         .font_size(14)
         .align_text_top()
-        .left_justify();
+        .left_justify()
+        .color(BLACK);
 }

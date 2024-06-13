@@ -1,7 +1,12 @@
+use std::collections::HashMap;
+
 use crate::misc::hex_to_rgb;
 
 use super::{
-    help_classes::Rules, lsystem_config::LsystemConfig, lsystem_tree::LsystemTree, Behaviour,
+    help_classes::Rules,
+    lsystem_config::LsystemConfig,
+    lsystem_tree::{Branch, LsystemTree},
+    Behaviour,
 };
 use nannou::{
     geom::{pt2, Point2},
@@ -28,14 +33,20 @@ pub struct LsystemBuilder {
 
 // help struct for generating lsystem tree
 struct DotData {
+    id: usize,
     pos: Point2,
     dir: Point2,
     scale: f32,
 }
 
 impl DotData {
-    fn new(pos: Point2, dir: Point2, scale: f32) -> DotData {
-        DotData { pos, dir, scale }
+    fn new(id: usize, pos: Point2, dir: Point2, scale: f32) -> DotData {
+        DotData {
+            id,
+            pos,
+            dir,
+            scale,
+        }
     }
 }
 
@@ -86,27 +97,36 @@ impl LsystemBuilder {
     fn lsystem_to_dots(&self, lsystem: &String) -> LsystemTree {
         let startpoint = pt2(0.0, 0.0);
         // todo multiple colors
-        let color = hex_to_rgb("#FFFFFF");
 
-        let mut dots = vec![(startpoint, color)];
+        let mut dots = vec![startpoint];
+        // main branch start on startdot dot and ends on the lsystem.len +1 dot
+        let mut branches = vec![Branch::new(0, lsystem.len() + 1)];
 
-        let mut dot = DotData::new(startpoint, self.start_direction, self.scale_start);
+        let mut dot = DotData::new(0, startpoint, self.start_direction, self.scale_start);
 
-        let mut branches: Vec<DotData> = vec![];
+        let mut fork_dots: Vec<DotData> = vec![];
 
-        for ch in lsystem.chars() {
+        for (i, ch) in lsystem.chars().enumerate() {
+            // i+1 because the element with 0 id is our startpoint
+            // this is the number of the dot in tree vector (the tree is a vector of dots)
+            let dot_id = i + 1;
             if let Some(beh) = self.rules.get_behaviour(&ch) {
                 match beh {
                     Behaviour::DrawForward => {
                         dot.pos += dot.dir * dot.scale;
                         dot.scale = self.scale_min.max(dot.scale + self.scale_delta);
-                        dots.push((dot.pos, color));
+                        dots.push(dot.pos);
                     }
                     Behaviour::RotateLeft => dot.dir = dot.dir.rotate(self.rotation_factor),
                     Behaviour::RotateRight => dot.dir = dot.dir.rotate(-self.rotation_factor),
-                    Behaviour::Branch => branches.push(DotData::new(dot.pos, dot.dir, dot.scale)),
+                    Behaviour::Branch => {
+                        fork_dots.push(DotData::new(dot_id, dot.pos, dot.dir, dot.scale));
+                    }
                     Behaviour::BranchStop => {
-                        dot = branches.pop().expect("There are to many ] in lsystem");
+                        let branch_end = dot_id;
+                        dot = fork_dots.pop().expect("There are to many ] in lsystem");
+                        let branch_start = dot.id;
+                        branches.push(Branch::new(branch_start, branch_end));
                     }
                 }
             } else {
@@ -116,11 +136,12 @@ impl LsystemBuilder {
 
         if let Some(beh) = self.rules.get_behaviour(&lsystem.chars().last().unwrap()) {
             match beh {
-                Behaviour::DrawForward => dots.push((dot.pos, color)),
+                Behaviour::DrawForward => dots.push(dot.pos),
+
                 _ => {}
             }
         }
 
-        LsystemTree::new(dots)
+        LsystemTree::new(dots, branches)
     }
 }

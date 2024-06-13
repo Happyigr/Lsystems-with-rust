@@ -1,11 +1,10 @@
 use std::{fmt::Display, fs::File, io::BufReader};
 
 use nannou::geom::Point2;
-use serde::{Deserialize, Serialize};
 
 use super::{help_classes::Rules, Rule};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone)]
 pub struct LsystemConfig {
     // main things
     pub axiom: String,
@@ -66,15 +65,15 @@ impl LsystemConfig {
         }
     }
 
-    pub fn read_from_json() -> LsystemConfig {
-        let file =
-            File::open("config.json").unwrap_or_else(|_| File::create("config.json").unwrap());
-        let read_buf = BufReader::new(file);
-        serde_json::from_reader(read_buf).unwrap()
-    }
-
-    pub fn write_to_json(&self) {
-        let file = File::create("config.json").unwrap();
-        serde_json::to_writer(file, &self).unwrap();
-    }
+    // pub fn read_from_json() -> LsystemConfig {
+    //     let file =
+    //         File::open("config.json").unwrap_or_else(|_| File::create("config.json").unwrap());
+    //     let read_buf = BufReader::new(file);
+    //     serde_json::from_reader(read_buf).unwrap()
+    // }
+    //
+    // pub fn write_to_json(&self) {
+    //     let file = File::create("config.json").unwrap();
+    //     serde_json::to_writer(file, &self).unwrap();
+    // }
 }
