@@ -1,11 +1,9 @@
 use std::collections::HashMap;
 
-use crate::misc::hex_to_rgb;
-
 use super::{
-    help_classes::Rules,
+    help_classes::{HashDot, Rules},
     lsystem_config::LsystemConfig,
-    lsystem_tree::{Branch, LsystemTree},
+    lsystem_tree::LsystemTree,
     Behaviour,
 };
 use nannou::{
@@ -33,19 +31,19 @@ pub struct LsystemBuilder {
 
 // help struct for generating lsystem tree
 struct DotData {
-    id: usize,
     pos: Point2,
     dir: Point2,
     scale: f32,
+    branch_id: usize,
 }
 
 impl DotData {
-    fn new(id: usize, pos: Point2, dir: Point2, scale: f32) -> DotData {
+    fn new(pos: Point2, dir: Point2, scale: f32, branch_id: usize) -> DotData {
         DotData {
-            id,
             pos,
             dir,
             scale,
+            branch_id,
         }
     }
 }
@@ -66,7 +64,7 @@ impl LsystemBuilder {
     // gives a LsystemTree from self with
     pub fn build_tree(&self, lvl: &usize) -> LsystemTree {
         let lsystem = self.generate_sequence(lvl);
-        self.lsystem_to_dots(&lsystem)
+        self.lsystem_to_tree(&lsystem)
     }
 
     // generating new string lsystem to given lvl
@@ -93,55 +91,131 @@ impl LsystemBuilder {
         lvl_sequence
     }
 
+    fn sequence_ro_branches(&self, lsystem: &String) -> HashMap<usize, String> {
+        let mut branches_str: HashMap<usize, String> = HashMap::new();
+
+        let mut current_str = String::new();
+        let mut current_branch = 0;
+        let mut last_created_branch = 0;
+
+        let mut queued_branches = vec![];
+        let mut queued_branches_id = vec![];
+
+        for ch in lsystem.chars().into_iter() {
+            if let Some(beh) = self.rules.get_behaviour(&ch) {
+                match beh {
+                    Behaviour::Branch => {
+                        // queue the branch
+                        queued_branches.push(current_str);
+                        queued_branches_id.push(current_branch);
+
+                        last_created_branch += 1;
+
+                        current_str = String::new();
+                        current_branch = last_created_branch;
+                    }
+                    Behaviour::BranchStop => {
+                        branches_str.insert(current_branch, current_str);
+
+                        current_str = queued_branches.pop().unwrap();
+                        current_branch = queued_branches_id.pop().unwrap();
+                    }
+                    _ => {
+                        current_str.push(ch);
+                    }
+                }
+            }
+        }
+        branches_str.insert(current_branch, current_str.clone());
+
+        branches_str
+    }
     // encodes the given lsystem string in the 2D points friom startpoint = (0.0,0.0)
-    fn lsystem_to_dots(&self, lsystem: &String) -> LsystemTree {
+    fn lsystem_to_tree(&self, lsystem: &String) -> LsystemTree {
         let startpoint = pt2(0.0, 0.0);
         // todo multiple colors
 
-        let mut dots = vec![startpoint];
-        // main branch start on startdot dot and ends on the lsystem.len +1 dot
-        let mut branches = vec![Branch::new(0, lsystem.len() + 1)];
+        let mut res = vec![startpoint];
+        let mut branches: HashMap<usize, Vec<Point2>> = HashMap::new();
+        let mut dot_to_branch: HashMap<HashDot, usize> = HashMap::new();
+        let mut dot_id_to_branch: HashMap<usize, usize> = HashMap::new();
 
-        let mut dot = DotData::new(0, startpoint, self.start_direction, self.scale_start);
-
+        let mut dot = DotData::new(startpoint, self.start_direction, self.scale_start, 0);
         let mut fork_dots: Vec<DotData> = vec![];
 
-        for (i, ch) in lsystem.chars().enumerate() {
-            // i+1 because the element with 0 id is our startpoint
-            // this is the number of the dot in tree vector (the tree is a vector of dots)
-            let dot_id = i + 1;
+        let mut current_dots: Vec<Point2> = vec![];
+        let mut queued_branches: Vec<Vec<Point2>> = vec![];
+        let mut queued_branches_id: Vec<usize> = vec![];
+
+        let mut last_created = 0;
+        let mut current_branch_id = 0;
+
+        for ch in lsystem.chars() {
             if let Some(beh) = self.rules.get_behaviour(&ch) {
                 match beh {
                     Behaviour::DrawForward => {
                         dot.pos += dot.dir * dot.scale;
                         dot.scale = self.scale_min.max(dot.scale + self.scale_delta);
-                        dots.push(dot.pos);
+                        res.push(dot.pos);
+
+                        // for branches
+                        current_dots.push(dot.pos);
                     }
                     Behaviour::RotateLeft => dot.dir = dot.dir.rotate(self.rotation_factor),
                     Behaviour::RotateRight => dot.dir = dot.dir.rotate(-self.rotation_factor),
+                    // on branching push the current dots in the previos branch and start a new uniqe branch
                     Behaviour::Branch => {
-                        fork_dots.push(DotData::new(dot_id, dot.pos, dot.dir, dot.scale));
+                        fork_dots.push(DotData::new(
+                            dot.pos,
+                            dot.dir,
+                            dot.scale,
+                            current_branch_id,
+                        ));
+
+                        // insert the connect dot of the branch
+                        let dot_pos = HashDot(dot.pos);
+                        dot_to_branch.insert(dot_pos, last_created);
+                        // res.len()-1 is the number of the dot in result dots
+                        dot_id_to_branch.insert(res.len() - 1, last_created);
+                        // queue the current branch
+                        queued_branches.push(current_dots);
+                        queued_branches_id.push(current_branch_id);
+
+                        // create a new one
+                        current_dots = vec![];
+                        last_created += 1;
+                        current_branch_id = last_created;
                     }
                     Behaviour::BranchStop => {
-                        let branch_end = dot_id;
+                        // getting the fork dot info
                         dot = fork_dots.pop().expect("There are to many ] in lsystem");
-                        let branch_start = dot.id;
-                        branches.push(Branch::new(branch_start, branch_end));
+
+                        // insert the info about closed branch
+                        branches.insert(current_branch_id, current_dots);
+
+                        current_dots = queued_branches.pop().unwrap();
+                        current_branch_id = queued_branches_id.pop().unwrap();
                     }
                 }
             } else {
                 unimplemented!("The meaning of the {ch} char is not implemented");
             }
         }
+        branches.insert(current_branch_id, current_dots);
 
         if let Some(beh) = self.rules.get_behaviour(&lsystem.chars().last().unwrap()) {
             match beh {
-                Behaviour::DrawForward => dots.push(dot.pos),
-
+                Behaviour::DrawForward => res.push(dot.pos),
                 _ => {}
             }
         }
 
-        LsystemTree::new(dots, branches)
+        LsystemTree {
+            dots: res,
+            branches,
+            dot_to_branch,
+            dot_id_to_branch,
+            start_point_to_branch: HashMap::new(),
+        }
     }
 }

@@ -2,85 +2,127 @@ mod config;
 mod lsystem;
 mod misc;
 
+use std::collections::HashSet;
+
 use config::AppConfig;
-use lsystem::{LsystemBuilder, LsystemTree};
-use misc::{debug_info, hex_to_rgb};
+use lsystem::{HashDot, LsystemBuilder, LsystemTree};
+use misc::hex_to_rgb;
 use nannou::prelude::*;
 
 fn main() {
     nannou::app(model).update(update).simple_window(view).run();
 }
 
+#[derive(Debug, Hash, Eq, PartialEq)]
+struct BranchInfo {
+    pub start_dot: HashDot,
+    pub i_on_start: usize,
+}
+
+impl BranchInfo {
+    fn new(start_dot: HashDot, i_on_start: usize) -> BranchInfo {
+        BranchInfo {
+            start_dot,
+            i_on_start,
+        }
+    }
+}
+
 struct Model {
-    pub index: usize,
+    pub previous_index: usize,
+    pub progress_i: usize,
+    pub groth_speed: usize,
+    pub app_config: AppConfig,
+    pub trees: Vec<LsystemTree>,
+    pub branches_to_animate: HashSet<BranchInfo>,
 }
 
 fn model(_app: &App) -> Model {
-    Model { index: 0 }
-}
-
-fn update(_app: &App, model: &mut Model, _update: Update) {
-    model.index += 30;
-}
-
-fn view(app: &App, model: &Model, frame: Frame) {
-    // if len == 1, then the tree will be in the center bottom of the screen
-    // else, the trees will be planted from left bottom to right bottom with 50 distance between them
     let deeps = vec![8, 8];
     let app_config = AppConfig::new();
-
-    let draw = app.draw();
-    let window = app.main_window();
-    let win = window.rect();
-
-    draw.background().color(hex_to_rgb(&app_config.bg_color));
-
-    let mut start_point = app_config
-        .start_point
-        .unwrap_or(pt2(win.pad(100.0).left(), win.bottom()));
-    if deeps.len() == 1 {
-        start_point = pt2(0.0, win.bottom());
-    }
-
-    let delta = app_config.start_point_delta.unwrap_or(pt2(100.0, 0.0));
-
     let lsystem_builder = LsystemBuilder::new(&app_config.config.clone());
+    // if len == 1, then the tree will be in the center bottom of the screen
+    // else, the trees will be planted from left bottom to right bottom with 50 distance between them
     let mut trees = vec![];
-
     deeps.iter().for_each(|deep| {
         trees.push(lsystem_builder.build_tree(&deep));
     });
 
-    trees[0].move_tree(start_point);
-    draw_branch(&trees[0].dots[..], &app_config, &draw);
+    let groth_speed = 10;
 
-    let tree = &mut trees[1];
-    tree.move_tree(start_point + delta);
-    // 0 is the main branch
-    let mut picked_started_points: Vec<usize> = vec![0];
-    // check if the dot in the branches start and then add it to tbranches to draw
-    let anim_progress = model.index.min(tree.dots.len());
-    for branch_start in picked_started_points {
-        let branch_end = tree.branches.get(&branch_start).unwrap();
-        let draw_dot = (branch_start + anim_progress).min(*branch_end);
-        draw_branch(&tree.dots[branch_start..draw_dot], &app_config, &draw);
+    let delta = app_config.start_point_delta.unwrap_or(pt2(200.0, 0.0));
+    let start_point = app_config.start_point.unwrap_or_else(|| {
+        if deeps.len() == 1 {
+            return pt2(0.0, -200.0);
+        } else {
+            return pt2(-100.0, -200.0);
+        }
+    });
+
+    for (i, tree) in trees.iter_mut().enumerate() {
+        tree.move_tree(start_point + delta * i as f32);
     }
 
-    // for (i, tree) in trees.iter_mut().enumerate() {
-    //     let mut branches_to_draw: Vec<usize> = vec![0];
-    //     tree.move_tree(start_point + delta * i as f32);
-    //     let anim_progress = model.index.min(tree.dots.len());
-    //     draw_branch(&tree.dots[0..anim_progress], &app_config, &draw);
-    // }
+    // 0,0 is the main branch
+    let branches_to_animate = HashSet::new();
+    Model {
+        previous_index: 0,
+        progress_i: 0,
+        groth_speed,
+        branches_to_animate,
+        app_config,
+        trees,
+    }
+}
+
+fn update(_app: &App, model: &mut Model, _update: Update) {
+    model.previous_index = model.progress_i;
+    model.progress_i += model.groth_speed;
+
+    let activated_dots = &model.trees[1].dots[model.previous_index..model.progress_i];
+
+    for dot in activated_dots {
+        if let Some(_) = model.trees[1].start_point_to_branch.get(&HashDot(*dot)) {
+            model
+                .branches_to_animate
+                .insert(BranchInfo::new(HashDot(*dot), model.progress_i));
+        }
+    }
+    println!(
+        "index:{}, prev_i:{}\n{:?}",
+        model.progress_i, model.previous_index, model.branches_to_animate
+    );
+}
+
+fn view(app: &App, model: &Model, frame: Frame) {
+    let draw = app.draw();
+
+    draw.background()
+        .color(hex_to_rgb(&model.app_config.bg_color));
+
+    draw.polyline()
+        .weight(model.app_config.config.line_weight)
+        .points(
+            model.trees[0].dots[..model.trees[0].dots.len()]
+                .iter()
+                .cloned(),
+        )
+        .color(hex_to_rgb(&model.app_config.config.main_color));
+
+    // check if the dot in the branches start and then add it to tbranches to draw
+    for branch_info in model.branches_to_animate.iter() {
+        let branch = model.trees[1]
+            .start_point_to_branch
+            .get(&branch_info.start_dot)
+            .unwrap();
+        let to_index = (model.progress_i - branch_info.i_on_start).min(branch.len());
+        draw.polyline()
+            .weight(model.app_config.config.line_weight)
+            .points(branch[..to_index].iter().cloned())
+            .color(hex_to_rgb(&model.app_config.config.main_color));
+    }
 
     // debug_info(&draw, win, &app_config.config);
 
     draw.to_frame(app, &frame).unwrap();
-}
-
-fn draw_branch(branch: &[Point2], app_config: &AppConfig, draw: &Draw) {
-    draw.polyline()
-        .weight(app_config.config.line_weight)
-        .points(branch.iter().cloned())
-        .color(hex_to_rgb(&app_config.config.main_color));
 }
