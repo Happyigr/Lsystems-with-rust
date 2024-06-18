@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use super::{
-    help_classes::{HashDot, Rules},
+    help_classes::{BranchDot, HashDot, Rules},
     lsystem_config::LsystemConfig,
     lsystem_tree::LsystemTree,
     Behaviour,
@@ -136,15 +136,13 @@ impl LsystemBuilder {
         // todo multiple colors
 
         let mut res = vec![startpoint];
-        let mut branches: HashMap<usize, Vec<Point2>> = HashMap::new();
-        let mut dot_to_branch: HashMap<HashDot, usize> = HashMap::new();
-        let mut dot_id_to_branch: HashMap<usize, usize> = HashMap::new();
+        let mut branches: HashMap<usize, Vec<BranchDot>> = HashMap::new();
 
         let mut dot = DotData::new(startpoint, self.start_direction, self.scale_start, 0);
         let mut fork_dots: Vec<DotData> = vec![];
 
-        let mut current_dots: Vec<Point2> = vec![];
-        let mut queued_branches: Vec<Vec<Point2>> = vec![];
+        let mut current_dots: Vec<BranchDot> = vec![];
+        let mut queued_branches: Vec<Vec<BranchDot>> = vec![];
         let mut queued_branches_id: Vec<usize> = vec![];
 
         let mut last_created = 0;
@@ -159,7 +157,11 @@ impl LsystemBuilder {
                         res.push(dot.pos);
 
                         // for branches
-                        current_dots.push(dot.pos);
+                        let branch_dot = BranchDot {
+                            pos: dot.pos,
+                            connected_branches_id: vec![],
+                        };
+                        current_dots.push(branch_dot);
                     }
                     Behaviour::RotateLeft => dot.dir = dot.dir.rotate(self.rotation_factor),
                     Behaviour::RotateRight => dot.dir = dot.dir.rotate(-self.rotation_factor),
@@ -172,11 +174,25 @@ impl LsystemBuilder {
                             current_branch_id,
                         ));
 
-                        // insert the connect dot of the branch
-                        let dot_pos = HashDot(dot.pos);
-                        dot_to_branch.insert(dot_pos, last_created);
-                        // res.len()-1 is the number of the dot in result dots
-                        dot_id_to_branch.insert(res.len() - 1, last_created);
+                        if current_dots.len() == 0 {
+                            let mut i = queued_branches.len() - 1;
+                            let mut temp = queued_branches.get_mut(i).unwrap();
+                            while temp.len() == 0 {
+                                i -= 1;
+                                temp = queued_branches.get_mut(i).unwrap();
+                            }
+                            temp.last_mut()
+                                .unwrap()
+                                .connected_branches_id
+                                .push(last_created + 1);
+                        } else {
+                            current_dots
+                                .last_mut()
+                                .unwrap()
+                                .connected_branches_id
+                                .push(last_created + 1);
+                        }
+
                         // queue the current branch
                         queued_branches.push(current_dots);
                         queued_branches_id.push(current_branch_id);
@@ -213,9 +229,6 @@ impl LsystemBuilder {
         LsystemTree {
             dots: res,
             branches,
-            dot_to_branch,
-            dot_id_to_branch,
-            start_point_to_branch: HashMap::new(),
         }
     }
 }

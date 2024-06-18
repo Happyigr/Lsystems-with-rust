@@ -26,7 +26,7 @@ impl BranchInfo {
 struct Model {
     pub previous_index: usize,
     pub progress_i: usize,
-    pub growth_speed: usize,
+    pub groth_speed: usize,
     pub app_config: AppConfig,
     pub trees: Vec<LsystemTree>,
     pub branches_to_animate_current: Vec<BranchInfo>,
@@ -41,7 +41,7 @@ fn model(_app: &App) -> Model {
         trees.push(lsystem_builder.build_tree(&deep));
     });
 
-    let growth_speed = 10;
+    let groth_speed = 10;
 
     let delta = app_config.start_point_delta.unwrap_or(pt2(200.0, 0.0));
     let start_point = app_config.start_point.unwrap_or_else(|| {
@@ -56,11 +56,15 @@ fn model(_app: &App) -> Model {
         tree.move_tree(start_point + delta * i as f32);
     }
 
-    let branches_to_animate_current = vec![BranchInfo::new(0, 0)];
+    let branches_to_animate_current = vec![
+        BranchInfo::new(0, 0),
+        BranchInfo::new(1, 0),
+        BranchInfo::new(2, 0),
+    ];
     Model {
         previous_index: 0,
         progress_i: 0,
-        growth_speed,
+        groth_speed,
         branches_to_animate_current,
         app_config,
         trees,
@@ -69,7 +73,7 @@ fn model(_app: &App) -> Model {
 
 fn update(_app: &App, model: &mut Model, _update: Update) {
     model.previous_index = model.progress_i;
-    model.progress_i += model.growth_speed;
+    model.progress_i += model.groth_speed;
 
     let tree = model.trees[1].clone();
     let mut new_branches = vec![];
@@ -78,14 +82,6 @@ fn update(_app: &App, model: &mut Model, _update: Update) {
         if let Some(branch_dots) = tree.branches.get(&branch_info.id) {
             let to_index = (model.progress_i - branch_info.i_on_start).min(branch_dots.len());
 
-            // Log branch and index info
-            println!(
-                "Branch ID: {}, To Index: {}, Branch Length: {}",
-                branch_info.id,
-                to_index,
-                branch_dots.len()
-            );
-
             for dot in branch_dots[..to_index].iter() {
                 if !dot.connected_branches_id.is_empty() {
                     for branch_id in dot.connected_branches_id.iter() {
@@ -93,15 +89,13 @@ fn update(_app: &App, model: &mut Model, _update: Update) {
                     }
                 }
             }
-        } else {
-            println!("Branch ID {} not found in tree", branch_info.id);
         }
     }
 
     model.branches_to_animate_current.extend(new_branches);
 
     println!(
-        "Index: {}, Previous Index: {} - Current Branches: {:?}",
+        "index:{}, prev_i:{}    -   {:?}",
         model.progress_i, model.previous_index, model.branches_to_animate_current
     );
 }
@@ -122,32 +116,15 @@ fn view(app: &App, model: &Model, frame: Frame) {
     for branch_info in model.branches_to_animate_current.iter() {
         if let Some(branch) = model.trees[1].branches.get(&branch_info.id) {
             let to_index = (model.progress_i - branch_info.i_on_start).min(branch.len());
-            if to_index != 0 {
-                let dots = branch[..to_index]
-                    .iter()
-                    .map(|br_dot| br_dot.pos)
-                    .collect::<Vec<Point2>>();
+            let dots = branch[..to_index]
+                .iter()
+                .map(|br_dot| br_dot.pos)
+                .collect::<Vec<Point2>>();
 
-                // Log branch drawing info
-                println!(
-                    "Drawing Branch ID: {}, To Index: {}, Dots Count: {}",
-                    branch_info.id,
-                    to_index,
-                    dots.len()
-                );
-
-                draw.polyline()
-                    .weight(model.app_config.config.line_weight)
-                    .points(dots.iter().cloned())
-                    .color(hex_to_rgb(&model.app_config.config.main_color));
-            } else {
-                println!(
-                    "Not Drawing Branch ID: {}, To Index: {}",
-                    branch_info.id, to_index,
-                );
-            }
-        } else {
-            println!("Branch ID {} not found in tree for drawing", branch_info.id);
+            draw.polyline()
+                .weight(model.app_config.config.line_weight)
+                .points(dots.iter().cloned())
+                .color(hex_to_rgb(&model.app_config.config.main_color));
         }
     }
 
