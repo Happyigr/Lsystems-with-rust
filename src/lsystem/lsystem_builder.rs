@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use super::{
-    help_classes::{BranchDot, HashDot, Rules},
+    help_classes::{BranchDot, Rules},
     lsystem_config::LsystemConfig,
     lsystem_tree::LsystemTree,
     Behaviour,
@@ -34,17 +34,11 @@ struct DotData {
     pos: Point2,
     dir: Point2,
     scale: f32,
-    branch_id: usize,
 }
 
 impl DotData {
-    fn new(pos: Point2, dir: Point2, scale: f32, branch_id: usize) -> DotData {
-        DotData {
-            pos,
-            dir,
-            scale,
-            branch_id,
-        }
+    fn new(pos: Point2, dir: Point2, scale: f32) -> DotData {
+        DotData { pos, dir, scale }
     }
 }
 
@@ -91,45 +85,6 @@ impl LsystemBuilder {
         lvl_sequence
     }
 
-    fn sequence_ro_branches(&self, lsystem: &String) -> HashMap<usize, String> {
-        let mut branches_str: HashMap<usize, String> = HashMap::new();
-
-        let mut current_str = String::new();
-        let mut current_branch = 0;
-        let mut last_created_branch = 0;
-
-        let mut queued_branches = vec![];
-        let mut queued_branches_id = vec![];
-
-        for ch in lsystem.chars().into_iter() {
-            if let Some(beh) = self.rules.get_behaviour(&ch) {
-                match beh {
-                    Behaviour::Branch => {
-                        // queue the branch
-                        queued_branches.push(current_str);
-                        queued_branches_id.push(current_branch);
-
-                        last_created_branch += 1;
-
-                        current_str = String::new();
-                        current_branch = last_created_branch;
-                    }
-                    Behaviour::BranchStop => {
-                        branches_str.insert(current_branch, current_str);
-
-                        current_str = queued_branches.pop().unwrap();
-                        current_branch = queued_branches_id.pop().unwrap();
-                    }
-                    _ => {
-                        current_str.push(ch);
-                    }
-                }
-            }
-        }
-        branches_str.insert(current_branch, current_str.clone());
-
-        branches_str
-    }
     // encodes the given lsystem string in the 2D points friom startpoint = (0.0,0.0)
     fn lsystem_to_tree(&self, lsystem: &String) -> LsystemTree {
         let startpoint = pt2(0.0, 0.0);
@@ -138,7 +93,7 @@ impl LsystemBuilder {
         let mut res = vec![startpoint];
         let mut branches: HashMap<usize, Vec<BranchDot>> = HashMap::new();
 
-        let mut dot = DotData::new(startpoint, self.start_direction, self.scale_start, 0);
+        let mut dot = DotData::new(startpoint, self.start_direction, self.scale_start);
         let mut fork_dots: Vec<DotData> = vec![];
 
         let mut current_dots: Vec<BranchDot> = vec![];
@@ -167,12 +122,7 @@ impl LsystemBuilder {
                     Behaviour::RotateRight => dot.dir = dot.dir.rotate(-self.rotation_factor),
                     // on branching push the current dots in the previos branch and start a new uniqe branch
                     Behaviour::Branch => {
-                        fork_dots.push(DotData::new(
-                            dot.pos,
-                            dot.dir,
-                            dot.scale,
-                            current_branch_id,
-                        ));
+                        fork_dots.push(DotData::new(dot.pos, dot.dir, dot.scale));
 
                         if current_dots.len() == 0 {
                             let mut i = queued_branches.len() - 1;

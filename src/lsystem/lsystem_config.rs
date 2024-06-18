@@ -1,8 +1,6 @@
-use std::{fmt::Display, fs::File, io::BufReader};
-
+use super::help_classes::Rules;
 use nannou::geom::Point2;
-
-use super::{help_classes::Rules, Rule};
+use std::fmt::Display;
 
 #[derive(Clone)]
 pub struct LsystemConfig {
@@ -18,6 +16,7 @@ pub struct LsystemConfig {
     pub rotation_factor: f32,
     // the scale factor of the groth_step in distance (1 for constant growing, -0.5 for smaller
     // growing on the end of the plant)
+
     // this factor will be added to the start_direction by growing of our plant
     pub scale_delta: f32,
     pub scale_start: f32,
@@ -36,44 +35,4 @@ impl Display for LsystemConfig {
             self.main_color, self.start_direction, self.rotation_factor, self.scale_delta, self.scale_min)?;
         Ok(())
     }
-}
-
-impl LsystemConfig {
-    pub fn new(
-        axiom: &str,
-        rules: Vec<Rule>,
-        main_color: String,
-        start_direction: Point2,
-        rotation_factor: f32,
-        scale_start: f32,
-        scale_delta: f32,
-        scale_min: f32,
-        line_weight: f32,
-        wind_power: Option<Point2>,
-    ) -> LsystemConfig {
-        LsystemConfig {
-            axiom: axiom.to_string(),
-            rules: Rules::new(rules),
-            main_color,
-            start_direction,
-            rotation_factor,
-            scale_start,
-            scale_delta,
-            scale_min,
-            line_weight,
-            wind_power,
-        }
-    }
-
-    // pub fn read_from_json() -> LsystemConfig {
-    //     let file =
-    //         File::open("config.json").unwrap_or_else(|_| File::create("config.json").unwrap());
-    //     let read_buf = BufReader::new(file);
-    //     serde_json::from_reader(read_buf).unwrap()
-    // }
-    //
-    // pub fn write_to_json(&self) {
-    //     let file = File::create("config.json").unwrap();
-    //     serde_json::to_writer(file, &self).unwrap();
-    // }
 }
