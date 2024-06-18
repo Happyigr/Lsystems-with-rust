@@ -9,10 +9,6 @@ use super::help_classes::BranchDot;
 pub struct LsystemTree {
     pub dots: Vec<Point2>,
     pub branches: HashMap<usize, Vec<BranchDot>>,
-    // pub start_point_to_branch: HashMap<HashDot, Vec<Point2>>,
-    // pub branches: HashMap<usize, Vec<Point2>>,
-    // pub dot_to_branch: HashMap<HashDot, usize>,
-    // pub dot_id_to_branch: HashMap<usize, usize>,
 }
 
 impl LsystemTree {
@@ -22,11 +18,6 @@ impl LsystemTree {
                 dot.pos = pt2(to_point.x + dot.pos.x, to_point.y + dot.pos.y);
             }
         }
-        // let mut temp = HashMap::new();
-        // for (dot, branch_id) in self.dot_to_branch.iter() {
-        //     let new_dot = *dot + HashDot(to_point);
-        //     temp.insert(new_dot, branch_id);
-        // }
 
         for dot in self.dots.iter_mut() {
             *dot += to_point;
