@@ -1,4 +1,7 @@
-use std::collections::HashMap;
+use std::{
+    collections::HashMap,
+    hash::{Hash, Hasher},
+};
 
 use super::{
     help_classes::{BranchDot, Rules},
@@ -27,6 +30,24 @@ pub struct LsystemBuilder {
     scale_delta: f32,
     scale_start: f32,
     scale_min: f32,
+}
+
+struct HashDot {
+    pos: Point2,
+}
+impl Hash for HashDot {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        // Hash both x and y coordinates to uniquely identify the point
+        self.pos.x.to_bits().hash(state);
+        self.pos.y.to_bits().hash(state);
+    }
+}
+impl Eq for HashDot {}
+
+impl PartialEq for HashDot {
+    fn eq(&self, other: &Self) -> bool {
+        self.pos.x == other.pos.x && self.pos.y == other.pos.y
+    }
 }
 
 // help struct for generating lsystem tree
@@ -97,11 +118,23 @@ impl LsystemBuilder {
         let mut fork_dots: Vec<DotData> = vec![];
 
         let mut current_dots: Vec<BranchDot> = vec![];
+
         let mut queued_branches: Vec<Vec<BranchDot>> = vec![];
         let mut queued_branches_id: Vec<usize> = vec![];
+        let mut dir_changed = false;
 
         let mut last_created = 0;
         let mut current_branch_id = 0;
+
+        // todo think about graph as the tree structure
+        let mut res_cutted = vec![startpoint];
+        let mut branches_cutted: HashMap<usize, Vec<BranchDot>> = HashMap::new();
+        let mut fork_dots_cutted: HashMap<HashDot, Vec<usize>> = HashMap::new();
+        let mut current_dots_cutted: Vec<BranchDot> = vec![];
+        let mut queued_branches_cutted: Vec<Vec<BranchDot>> = vec![];
+        let mut queued_branches_id_cutted: Vec<usize> = vec![];
+        let mut last_created_cutted = 0;
+        let mut current_branch_id_cutted = 0;
 
         for ch in lsystem.chars() {
             if let Some(beh) = self.rules.get_behaviour(&ch) {
@@ -116,10 +149,22 @@ impl LsystemBuilder {
                             pos: dot.pos,
                             connected_branches_id: vec![],
                         };
-                        current_dots.push(branch_dot);
+                        current_dots.push(branch_dot.clone());
+                        if dir_changed {
+                            res_cutted.push(dot.pos);
+                            current_dots_cutted.push(branch_dot.clone());
+                            dir_changed = false;
+                        }
                     }
-                    Behaviour::RotateLeft => dot.dir = dot.dir.rotate(self.rotation_factor),
-                    Behaviour::RotateRight => dot.dir = dot.dir.rotate(-self.rotation_factor),
+                    Behaviour::RotateLeft => {
+                        dir_changed = true;
+                        dot.dir = dot.dir.rotate(self.rotation_factor);
+                    }
+                    Behaviour::RotateRight => {
+                        dir_changed = true;
+                        dot.dir = dot.dir.rotate(-self.rotation_factor);
+                    }
+
                     // on branching push the current dots in the previos branch and start a new uniqe branch
                     Behaviour::Branch => {
                         fork_dots.push(DotData::new(dot.pos, dot.dir, dot.scale));
@@ -151,6 +196,20 @@ impl LsystemBuilder {
                         current_dots = vec![];
                         last_created += 1;
                         current_branch_id = last_created;
+
+                        // todo in res_cutted only the dots, that are new branching or new
+                        // direction
+                        // this is the fork_dots to branches hashmap, at the end change the dots in
+                        // the res_cutted so, that they are connected to those branches :)
+                        if let Some(connected_branches) =
+                            fork_dots_cutted.get_mut(&HashDot { pos: dot.pos })
+                        {
+                            connected_branches.push(last_created_cutted + 1);
+                        } else {
+                            fork_dots_cutted
+                                .insert(HashDot { pos: dot.pos }, vec![last_created_cutted + 1]);
+                            res_cutted.push(dot.pos);
+                        }
                     }
                     Behaviour::BranchStop => {
                         // getting the fork dot info
@@ -158,7 +217,6 @@ impl LsystemBuilder {
 
                         // insert the info about closed branch
                         branches.insert(current_branch_id, current_dots);
-
                         current_dots = queued_branches.pop().unwrap();
                         current_branch_id = queued_branches_id.pop().unwrap();
                     }
@@ -168,6 +226,7 @@ impl LsystemBuilder {
             }
         }
         branches.insert(current_branch_id, current_dots);
+        branches_cutted.insert(current_branch_id_cutted, current_dots_cutted);
 
         if let Some(beh) = self.rules.get_behaviour(&lsystem.chars().last().unwrap()) {
             match beh {
@@ -176,9 +235,29 @@ impl LsystemBuilder {
             }
         }
 
+        // adding the connected branch to cutted_dots
+        let res_cutted = res_cutted
+            .iter_mut()
+            .map(|dot| {
+                if let Some(branches) = fork_dots_cutted.get(&HashDot { pos: *dot }) {
+                    return BranchDot {
+                        pos: *dot,
+                        connected_branches_id: branches.clone(),
+                    };
+                } else {
+                    return BranchDot {
+                        pos: *dot,
+                        connected_branches_id: vec![],
+                    };
+                }
+            })
+            .collect::<Vec<BranchDot>>();
+
         LsystemTree {
             dots: res,
+            dots_cutted: res_cutted,
             branches,
+            branches_cutted,
         }
     }
 }

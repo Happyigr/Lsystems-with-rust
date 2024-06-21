@@ -7,6 +7,7 @@ pub const START_POINT_DELTA: Option<(f32, f32)> = None;
 // for animation
 pub const DOTS_PRO_SECOND: usize = 1;
 pub const WIND_POWER: Option<(f32, f32)> = None;
+pub const ANIMATE: bool = true;
 
 // generating options
 pub const START_DIRECTION: (f32, f32) = (0.0, 1.0);
